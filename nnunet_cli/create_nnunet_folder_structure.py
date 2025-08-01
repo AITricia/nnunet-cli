@@ -6,16 +6,17 @@ from typing import List
 
 from nnunet_cli.extract_labels_from_segmentation import extract_labels_from_segmentation
 
+
 # Extracts the patient ID from filenames with the format: img3d_bavctaXXX_segYY_baseline.nii.gz
 # Example: 'img3d_bavcta008_seg19_baseline.nii.gz' → returns 'bavcta008'
 def get_patient_id(filename: Path):
-    return filename.name.split('_')[1]  
+    return filename.name.split("_")[1]
 
 
 def greedy_group_split(all_files, get_group_id_fn, test_fraction=0.2):
     """
     Greedily assigns small groups to the test set until the target number of files is reached.
-    
+
     Args:
         all_files (List[Path]): List of image files.
         get_group_id_fn (Callable): Function that extracts group ID (e.g. patient ID) from file.
@@ -53,45 +54,77 @@ def greedy_group_split(all_files, get_group_id_fn, test_fraction=0.2):
 def strip_suffix(filename: Path):
     return filename.name.replace(".nii.gz", "").replace(".nii", "")
 
-def create_nnunet_folder_structure(images_dir: Path, segmentations_dir: Path, dataset_dir: Path, labels: List[int]):
-    all_files = sorted(set(images_dir.glob("*.nii")).union(images_dir.glob("*.nii.gz")))
+
+def create_nnunet_folder_structure(
+    images_dir: Path, segmentations_dir: Path, dataset_dir: Path, labels: List[int]
+):
+    all_files = sorted(set(images_dir.glob("*.nii*")))
 
     for subfolder in ["imagesTs", "imagesTr", "labelsTr"]:
-        (dataset_dir/subfolder).mkdir(parents=True, exist_ok=True)
+        (dataset_dir / subfolder).mkdir(parents=True, exist_ok=True)
 
-    train_files, test_files = greedy_group_split(all_files, get_patient_id, test_fraction=0.2)
+    train_files, test_files = greedy_group_split(
+        all_files, get_patient_id, test_fraction=0.2
+    )
 
     for file in train_files:
 
         shutil.copy(file, f"{dataset_dir}/imagesTr/{strip_suffix(file)}_0000.nii.gz")
-      
+
         segmentation_file = segmentations_dir / file.name
         if segmentation_file.exists():
-            extract_labels_from_segmentation(segmentation_file, labels, f"{dataset_dir}/labelsTr/{strip_suffix(file)}.nii.gz")
+            extract_labels_from_segmentation(
+                segmentation_file,
+                labels,
+                f"{dataset_dir}/labelsTr/{strip_suffix(file)}.nii.gz",
+            )
         else:
             raise FileNotFoundError(f"Missing segmentation file: {segmentation_file}")
 
-
     for file in test_files:
-        shutil.copy(file, dataset_dir/"imagesTs"/f"{strip_suffix(file)}_0000.nii.gz")
-    print(f"✅ Copied {len(train_files)} training files and {len(test_files)} test files to the nnUNet folder structure at {dataset_dir}.")
-   
+        shutil.copy(
+            file, dataset_dir / "imagesTs" / f"{strip_suffix(file)}_0000.nii.gz"
+        )
+    print(
+        f"✅ Copied {len(train_files)} training files and {len(test_files)} test files to the nnUNet folder structure at {dataset_dir}."
+    )
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Create nnUNet folder structure for a dataset.")
-    parser.add_argument("--images-dir", type=Path, required=True, help="Directory containing 3D CT images.")
-    parser.add_argument("--segmentations-dir", type=Path, required=True, help="Directory containing 3D segmentations.")
-    parser.add_argument("--dataset-dir", type=Path, required=True, help="Output directory for nnUNet dataset structure.")
-    
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Create nnUNet folder structure for a dataset."
+    )
+    parser.add_argument(
+        "--images-dir",
+        type=Path,
+        required=True,
+        help="Directory containing 3D CT images.",
+    )
+    parser.add_argument(
+        "--segmentations-dir",
+        type=Path,
+        required=True,
+        help="Directory containing 3D segmentations.",
+    )
+    parser.add_argument(
+        "--dataset-dir",
+        type=Path,
+        required=True,
+        help="Output directory for nnUNet dataset structure.",
+    )
+
     args = parser.parse_args()
 
     if not args.images_dir.exists():
         raise FileNotFoundError(f"Images directory '{args.images_dir}' does not exist.")
     if not args.segmentations_dir.exists():
-        raise FileNotFoundError(f"Segmentations directory '{args.segmentations_dir}' does not exist.")
+        raise FileNotFoundError(
+            f"Segmentations directory '{args.segmentations_dir}' does not exist."
+        )
     if not args.dataset_dir.exists():
         args.dataset_dir.mkdir(parents=True, exist_ok=True)
         print(f"Created dataset directory: {args.dataset_dir}")
-    
-    create_nnunet_folder_structure(args.images_dir, args.segmentations_dir, args.dataset_dir)
 
+    create_nnunet_folder_structure(
+        args.images_dir, args.segmentations_dir, args.dataset_dir
+    )
